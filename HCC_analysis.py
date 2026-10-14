@@ -1,9 +1,9 @@
-"""Explicit reconstruction, NOT recovery of historical preprocessing.
+"""HCC analysis: mixed-cell oncofetal scores from input count matrices.
 
 Chunked mixed-human/mouse raw UMI -> per-cell total 10,000 -> natural log1p.
 No cell filtering or inferred annotations. Scores follow the expression-bin
 algorithm documented in Scanpy 1.9.8 tools/_score_genes.py, implemented with
-installed numpy/pandas/h5py because Scanpy/AnnData are unavailable locally.
+numpy/pandas/h5py without requiring Scanpy or AnnData.
 Historical Scanpy version, normalization, raw layer and cluster-7 membership
 are unknown. The resulting HDF5 is a documented COO store, NOT an .h5ad.
 """
@@ -105,7 +105,7 @@ def write_entries(g, start, rows, cols, values, totals, n_genes):
 
 
 def write_provenance(out, hashes, car_shape, dr_shape, car_barcodes, dr_barcodes, controls):
-    evidence = {'status': 'reconstruction; not exact historical reproduction',
+    evidence = {'status': 'HCC analysis; all supplied cells; historical filtering not applied',
         'input_files': hashes, 'python': platform.python_version(),
         'versions': {'numpy': np.__version__, 'pandas': pd.__version__, 'h5py': h5py.__version__},
         'retained_cells': {'carm': len(car_barcodes), 'carmdr': len(dr_barcodes)},
@@ -116,7 +116,7 @@ def write_provenance(out, hashes, car_shape, dr_shape, car_barcodes, dr_barcodes
             'algorithm_url': 'https://raw.githubusercontent.com/scverse/scanpy/1.9.8/scanpy/tools/_score_genes.py',
             'n_bins': 25, 'ctrl_size': 50, 'random_state': 0,
             'gene_pool': 'all 157230 measured mixed-species Gene Expression features',
-            'expression': 'explicitly reconstructed log1p matrix; no historical .raw recovered'},
+            'expression': 'log1p total-10000 matrix; no historical .raw recovered'},
         'assumptions': ['Normalize each cell across all measured genes to 10000 UMI, then natural log1p',
             'Retain all raw cells: historical cluster-7 filtering unavailable',
             'No Harmony/clustering/annotation needed or rerun for the score',
@@ -126,7 +126,7 @@ def write_provenance(out, hashes, car_shape, dr_shape, car_barcodes, dr_barcodes
             'Animal/biological replicate metadata absent; cell-level p is descriptive'],
         'integrity': 'CAR-M gzip stream read to EOF/CRC; MTX dimensions and entry count checked; '
                      'H5 CSC pointers, feature alignment, dimensions and nonnegative counts checked'}
-    (out / 'reconstruction_provenance.json').write_text(json.dumps(evidence, indent=2, default=int))
+    (out / 'analysis_provenance.json').write_text(json.dumps(evidence, indent=2, default=int))
     print('Completed', out.resolve(), flush=True)
 
 
@@ -134,7 +134,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--input-root', type=Path, required=True)
     parser.add_argument('--output-dir', type=Path,
-                        default=Path('hcc_raw_reconstruction'))
+                        default=Path('HCC_analysis_output'))
     parser.add_argument('--resume-completed', action='store_true',
                         help='Write missing metadata for a completed store, without recomputing')
     args = parser.parse_args()
@@ -202,7 +202,7 @@ def main():
         totals = {}
         with h5py.File(store_path, 'w') as store:
             store.attrs['status'] = 'incomplete'
-            store.attrs['reconstruction'] = True
+            store.attrs['analysis'] = 'HCC analysis'
             store.attrs['normalization'] = 'total RNA UMI to 10000, then natural log1p'
             store.attrs['filtering'] = 'none; historical cluster-7 assignment unavailable'
             dt = h5py.string_dtype('utf-8')

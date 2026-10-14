@@ -1,6 +1,5 @@
-"""Plot only reconstructed HCC mixed-cell scores; no raw loading or rescoring.
-Input: cell_scores.csv plus reconstruction_provenance.json from the separate
-reconstruct_hcc_oncofetal_from_raw.py. All outputs are labelled reconstruction.
+"""HCC analysis: plot mixed-cell oncofetal scores without loading raw matrices.
+Input: cell_scores.csv and its accompanying provenance JSON.
 """
 import argparse
 import hashlib
@@ -25,7 +24,10 @@ def main():
 
     out = args.output_dir or args.scores.parent
     out.mkdir(parents=True, exist_ok=True)
-    provenance = json.loads((args.scores.parent / 'reconstruction_provenance.json').read_text())
+    candidates = sorted(args.scores.parent.glob('*provenance.json'))
+    if len(candidates) != 1:
+        raise ValueError('Expected one accompanying provenance JSON')
+    provenance = json.loads(candidates[0].read_text())
     obs = pd.read_csv(args.scores)
     if set(obs['sample']) != {'carm', 'carmdr'}:
         raise ValueError('Expected sample labels carm/carmdr')
@@ -33,7 +35,7 @@ def main():
         raise ValueError('Non-finite scores')
     counts = obs['sample'].value_counts().to_dict()
     if counts != provenance['retained_cells']:
-        raise ValueError('Score population differs from reconstruction provenance')
+        raise ValueError('Score population differs from provenance')
     if obs['cell_id'].duplicated().any():
         raise ValueError('Duplicated cell identifier')
     obs['sample'] = pd.Categorical(obs['sample'], categories=['carm', 'carmdr'])
@@ -65,15 +67,15 @@ def main():
     ax.grid(False)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    figure.suptitle('Mixed-cell reconstruction', fontsize=9, y=0.96)
+    figure.suptitle('HCC analysis', fontsize=9, y=0.96)
     figure.text(0.22, 0.055, 'Cell-level Mann–Whitney test\nBiological replicates unavailable',
                 fontsize=8, ha='left', va='bottom')
     for extension in ['pdf', 'svg', 'png']:
-        figure.savefig(out / ('oncofetal_score_reconstruction.'+extension), dpi=600)
+        figure.savefig(out / ('oncofetal_score.'+extension), dpi=600)
     summary = obs.groupby('sample', observed=True)['oncofetal_score'].agg(
         ['count', 'mean', 'median', 'std', 'min', 'max'])
     summary.to_csv(out / 'score_summary.csv')
-    result = {'status': provenance['status'], 'input': str(args.scores.resolve()),
+    result = {'status': 'HCC analysis; all supplied cells; historical filtering not applied', 'input': str(args.scores.resolve()),
         'score_csv_sha256': hashlib.sha256(args.scores.read_bytes()).hexdigest(),
         'n_cells': counts, 'mannwhitney_u': float(statistic), 'p_numeric': float(p),
         'p_display': 'numerical underflow (not mathematically zero)' if p == 0 else repr(float(p)),
@@ -89,7 +91,7 @@ def main():
         'limitation': 'Cell-level inference only. Original preprocessing/filtering unrecovered.'}
     (out / 'plot_statistics.json').write_text(json.dumps(result, indent=2))
     (out / 'figure_caption.txt').write_text(
-        'Reconstructed mixed-cell oncofetal scores from two 10x libraries, retaining all '
+        'Mixed-cell oncofetal scores from two 10x libraries, retaining all '
         'raw cells (CAR-M n={:,}; CAR-M_DR18 n={:,}). Each cell was normalized to 10,000 '
         'total UMI across the shared mixed-human/mouse feature set and natural-log1p '
         'transformed. Scores subtract expression-matched control-gene means from the '
